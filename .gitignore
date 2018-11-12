@@ -1,0 +1,9 @@
+abc/
+cifar10/
+cifar-10-batches-py/
+cleverhans_tutorials/
+NIPS/
+tmp/
+*.png
+*.joblib
+*.docx
