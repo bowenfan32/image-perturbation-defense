@@ -17,6 +17,8 @@ from scipy.misc import imsave
 import tensorflow as tf
 from tensorflow.contrib.slim.nets import inception
 
+import csv
+
 slim = tf.contrib.slim
 tensorflow_master = ""
 checkpoint_path   = "NIPS/inception-v3/inception_v3.ckpt"
@@ -24,8 +26,7 @@ input_dir         = "NIPS/images/"
 max_epsilon       = 16.0
 image_width       = 299
 image_height      = 299
-batch_size        = 1000
-
+batch_size        = 32
 eps = 2.0 * max_epsilon / 255.0
 batch_shape = [batch_size, image_height, image_width, 3]
 num_classes = 1001
@@ -57,7 +58,8 @@ def show_image(a, fmt='png'):
     
 def save_image(a, num, fmt='png'):
     a = np.uint8((a+1.0)/2.0*255.0)
-    Image.fromarray(a).save('C:/Users/Bowen/Desktop/Project/image-perturbation-defense/NIPS/perturbed/' + str(i) + '.png', fmt)
+    Image.fromarray(a).save('C:/Users/Bowen/Desktop/Project/image-perturbation-defense/NIPS/perturbed/' + str(num) + '.png', fmt)
+    print(str(num))
    
 
 class InceptionModel(object):
@@ -87,23 +89,45 @@ image_iterator = load_images(input_dir, batch_shape)
 # get first batch of images
 filenames, images = next(image_iterator)
 
-image_metadata = pd.DataFrame({"ImageId": [f[:-4] for f in filenames]}).merge(image_classes,
-                                                                              on="ImageId")
+image_metadata = pd.DataFrame({"ImageId": [f[:-4] for f in filenames]}).merge(image_classes, on="ImageId")
 true_classes = image_metadata["TrueLabel"].tolist()
 target_classes = true_labels = image_metadata["TargetClass"].tolist()
-true_classes_names = (pd.DataFrame({"CategoryId": true_classes})
-                        .merge(categories, on="CategoryId")["CategoryName"].tolist())
+
+#true_classes_names = (pd.DataFrame({"CategoryId": true_classes})
+#                        .merge(categories, on="CategoryId")["CategoryName"].tolist())
+
+true_classes_names = []
+for i in true_classes:
+    true_classes_names.append(categories['CategoryName'][i-1])
+
+
 target_classes_names = (pd.DataFrame({"CategoryId": target_classes})
                           .merge(categories, on="CategoryId")["CategoryName"].tolist())
 
 print("Here's an example of one of the images in the development set")
-show_image(images[0])
-print(target_classes_names[0])
-print(true_classes_names[0].split(',')[0].replace(' ', '_')) # Convert ['giant panda, panda etc....'] to 'giant_panda'
+show_image(images[7])
+
+
+print(true_classes_names[7].split(',')[0].replace(' ', '_')) 
+
+
+
+print(categories['CategoryName'][1])
+
+
+
+
+
+
 
 for i in range(len(images)):
     save_image(images[i], i)
+    correct_label = true_classes_names[i].split(',')[0].replace(' ', '_') # Convert ['giant panda, panda etc....'] to 'giant_panda'
+    with open('true_classes.csv', 'a', newline='') as csvfile:
+        spamwriter = csv.writer(csvfile)
+        spamwriter.writerow([correct_label])
     
+
 
 
 # Perturbs the image various methods
@@ -112,25 +136,75 @@ from cleverhans.attacks import CarliniWagnerL2
 from cleverhans.attacks import FastGradientMethod
 tf.logging.set_verbosity(tf.logging.INFO)
 
-with tf.Graph().as_default():
-    x_input = tf.placeholder(tf.float32, shape=batch_shape)
-    model = InceptionModel(num_classes)
+#with tf.Graph().as_default():
+#    x_input = tf.placeholder(tf.float32, shape=batch_shape)
+#    model = InceptionModel(num_classes)
+#
+#    carlini = CarliniWagnerL2(model)
+#    jacobian = SaliencyMapMethod(model)
+#    fgsm  = FastGradientMethod(model)
+#    x_adv = fgsm.generate(x_input, eps=eps, clip_min=-1., clip_max=1.)
+#
+#    saver = tf.train.Saver(slim.get_model_variables())
+#    session_creator = tf.train.ChiefSessionCreator(
+#                      scaffold=tf.train.Scaffold(saver=saver),
+#                      checkpoint_filename_with_path=checkpoint_path,
+#                      master=tensorflow_master)
+#
+#    with tf.train.MonitoredSession(session_creator=session_creator) as sess:
+#        nontargeted_images = sess.run(x_adv, feed_dict={x_input: images})
+#
+#print("The original image is on the left, and the nontargeted adversarial image is on the right. They look very similar, don't they? It's very clear both are gondolas")
+#show_image(np.concatenate([images[1], nontargeted_images[1]], axis=1))
 
-    carlini = CarliniWagnerL2(model)
-    jacobian = SaliencyMapMethod(model)
-    fgsm  = FastGradientMethod(model)
-    x_adv = fgsm.generate(x_input, clip_min=-1., clip_max=1.)
 
-    saver = tf.train.Saver(slim.get_model_variables())
-    session_creator = tf.train.ChiefSessionCreator(
-                      scaffold=tf.train.Scaffold(saver=saver),
-                      checkpoint_filename_with_path=checkpoint_path,
-                      master=tensorflow_master)
 
-    with tf.train.MonitoredSession(session_creator=session_creator) as sess:
-        nontargeted_images = sess.run(x_adv, feed_dict={x_input: images})
 
-print("The original image is on the left, and the nontargeted adversarial image is on the right. They look very similar, don't they? It's very clear both are gondolas")
+
+batch_shape = [32, image_height, image_width, 3]
+image_iterator = load_images(input_dir, batch_shape)
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
+
+for x in batch(range(0, 1000), batch_size):
+    print (x)
+    
+
+    filenames, images = next(image_iterator)
+    
+    all_images_target_class = {image_metadata["ImageId"][i]+".png": image_metadata["TargetClass"][i]
+                           for i in image_metadata.index}
+
+    with tf.Graph().as_default():
+        x_input = tf.placeholder(tf.float32, shape=batch_shape)
+        model = InceptionModel(num_classes)
+    
+        carlini = CarliniWagnerL2(model)
+        jacobian = SaliencyMapMethod(model)
+        fgsm  = FastGradientMethod(model)
+        x_adv = fgsm.generate(x_input, eps=eps, clip_min=-1., clip_max=1.)
+    
+        saver = tf.train.Saver(slim.get_model_variables())
+        session_creator = tf.train.ChiefSessionCreator(
+                          scaffold=tf.train.Scaffold(saver=saver),
+                          checkpoint_filename_with_path=checkpoint_path,
+                          master=tensorflow_master)
+    
+        with tf.train.MonitoredSession(session_creator=session_creator) as sess:
+            nontargeted_images = sess.run(x_adv, feed_dict={x_input: images})
+
+    print("The original image is on the left, and the nontargeted adversarial image is on the right. They look very similar, don't they? It's very clear both are gondolas")
+    show_image(np.concatenate([images[1], nontargeted_images[1]], axis=1))
+    
+    for i in range(len(nontargeted_images)):
+        save_image(nontargeted_images[i], x[i])
+
+
+
+
+
 
 
 import keras
@@ -147,7 +221,6 @@ resnet_model = resnet50.ResNet50(weights='imagenet')
 mobilenet_model = mobilenet.MobileNet(weights='imagenet')
 
 def to_csv(result):
-    import csv
     with open('result.csv', 'a', newline='') as csvfile:
         spamwriter = csv.writer(csvfile)
         spamwriter.writerow(result)
@@ -205,6 +278,10 @@ def predict(model_name, model, compression_percent, image_num):
     to_csv(result)
     print (result)
     
+    
+    print("UNMODIFIED IMAGE (left)", 
+          "\n\tPredicted class:", label[0][0][1], 
+          "\n\tTrue class:     ", true_classes_names[i]) 
     
 for i in range(1000):
     
