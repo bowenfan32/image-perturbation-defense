@@ -98,14 +98,12 @@ target_classes_names = (pd.DataFrame({"CategoryId": target_classes})
 
 print("Here's an example of one of the images in the development set")
 show_image(images[0])
-
-
+print(target_classes_names[0])
+print(true_classes_names[0].split(',')[0].replace(' ', '_')) # Convert ['giant panda, panda etc....'] to 'giant_panda'
 
 for i in range(len(images)):
     save_image(images[i], i)
-
-
-
+    
 
 
 # Perturbs the image various methods
@@ -135,8 +133,6 @@ with tf.Graph().as_default():
 print("The original image is on the left, and the nontargeted adversarial image is on the right. They look very similar, don't they? It's very clear both are gondolas")
 
 
-
-
 import keras
 import numpy as np
 import cv2
@@ -150,35 +146,39 @@ inception_model = inception_v3.InceptionV3(weights='imagenet')
 resnet_model = resnet50.ResNet50(weights='imagenet')
 mobilenet_model = mobilenet.MobileNet(weights='imagenet')
 
-num=[201,179,157,134,112]
+def to_csv(result):
+    import csv
+    with open('result.csv', 'a', newline='') as csvfile:
+        spamwriter = csv.writer(csvfile)
+        spamwriter.writerow(result)
 
-def predict(model_name, model, compression_percent):
+def predict(model_name, model, compression_percent, image_num):
     
-    filename = 'NIPS/perturbed/0.png'
+    filename = 'NIPS/perturbed/'+ str(image_num)+'.png'
     # load an image in PIL format
     original = load_img(filename, target_size=(224,224))
     print('PIL image size',original.size)
-    plt.imshow(original)
-    plt.show()
+#    plt.imshow(original)
+#    plt.show()
     
 
-    data = cv2.imread('NIPS/perturbed/0.png')
-    
+    data = cv2.imread('NIPS/perturbed/'+ str(image_num)+'.png')
     compressed_dimension = 224 * compression_percent
-
-    small_img = cv2.resize(data, dsize=(compressed_dimension, compressed_dimension), interpolation=cv2.INTER_AREA)
-    
+    small_img = cv2.resize(data, dsize=(int(compressed_dimension), int(compressed_dimension)), interpolation=cv2.INTER_AREA)
     big_img = cv2.resize(small_img, dsize=(224,224), interpolation=cv2.INTER_LANCZOS4)
-    
-    plt.imshow(data)
+    RGB_img = cv2.cvtColor(small_img, cv2.COLOR_BGR2RGB)
+    #plt.imshow(RGB_img)
+    #plt.show()
      
     # convert the PIL image to a numpy array
     # IN PIL - image is in (width, height, channel)
     # In Numpy - image is in (height, width, channel)
-    numpy_image = img_to_array(big_img)
+    numpy_image = img_to_array(small_img)
     plt.imshow(np.uint8(numpy_image))
-    plt.show()
-    print('numpy array size',numpy_image.shape)
+    #plt.show()
+    #print('numpy array size',numpy_image.shape)
+    
+    numpy_image = img_to_array(big_img)
      
     # Convert the image / images into batch format
     # expand_dims will add an extra dimension to the data at a particular axis
@@ -186,21 +186,27 @@ def predict(model_name, model, compression_percent):
     # Thus we add the extra dimension to the axis 0.
     image_batch = np.expand_dims(numpy_image, axis=0)
     print('image batch size', image_batch.shape)
-    plt.imshow(np.uint8(image_batch[0]))
-    
+    #plt.imshow(np.uint8(image_batch[0]))
+    #plt.show()
     
     # prepare the image for the VGG model
     processed_image = model_name.preprocess_input(image_batch.copy())
      
     # get the predicted probabilities for each class
     predictions = model.predict(processed_image)
+    
     # print predictions
-     
     # convert the probabilities to class labels
     # We will get top 5 predictions which is the default
     label = decode_predictions(predictions)
-    print (label)
+    
+    result = (label[0][0][1], str(round(label[0][0][2]*100, 2))+'%')
+    
+    to_csv(result)
+    print (result)
     
     
+for i in range(1000):
     
-predict(resnet50, resnet_model, 60)
+    predict(inception_v3, inception_model, 0.6 ,i)
+
